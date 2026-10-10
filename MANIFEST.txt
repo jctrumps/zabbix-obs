@@ -1,0 +1,25 @@
+zabbix-obs project manifest
+
+Core:
+  docker-compose.yml
+  .env.example
+  README.md
+
+Configuration:
+  loki/local-config.yaml
+  otel/otel-collector-config.yaml
+  grafana/provisioning/datasources/datasources.yaml
+  grafana/provisioning/dashboards/dashboards.yaml
+
+Deployment:
+  deploy/ansible/
+  deploy/opentofu/proxmox/
+
+Documentation:
+  docs/
+  docs/windows-deployment.md
+  docs/security.md
+  docs/backup-restore.md
+
+Scripts:
+  scripts/

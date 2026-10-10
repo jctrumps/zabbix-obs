@@ -1,0 +1,14 @@
+proxmox_endpoint       = "https://PROXMOX_HOST:8006/"
+proxmox_api_token      = "PROXMOX_USER@pam!TOKEN_ID=TOKEN_SECRET"
+proxmox_insecure_tls   = false
+
+target_node            = "PROXMOX_NODE_NAME"
+vm_id                  = 9010
+vm_name                = "obs-01"
+template_vm_id         = 9000
+clone_full             = true
+cpu_cores              = 4
+memory_mb              = 8192
+disk_size              = 100
+storage_pool           = "local-lvm"
+network_bridge         = "vmbr0"

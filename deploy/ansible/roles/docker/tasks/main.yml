@@ -1,0 +1,23 @@
+---
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Install Docker packages from distribution repositories
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+    state: present
+    update_cache: true
+
+- name: Ensure Docker is enabled and started
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true

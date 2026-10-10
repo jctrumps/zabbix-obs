@@ -1,0 +1,7 @@
+---
+- name: Deploy zabbix-obs
+  hosts: observability
+  become: true
+  roles:
+    - docker
+    - zabbix-obs

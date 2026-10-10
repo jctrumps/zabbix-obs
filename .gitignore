@@ -1,0 +1,49 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+local/
+secrets/
+.vault-pass*
+vault-password*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# OpenTofu / Terraform state, inputs, and saved plans
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example
+*.tfvars.json
+*.tfplan
+tfplan
+tfplan.*
+plan.out
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+
+# Backups and runtime exports can contain credentials and telemetry
+backups/
+*.sql
+*.dump
+*.bak
+*.backup
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Local tooling artifacts
+*.retry
+*.log
+.DS_Store
+.idea/
+.vscode/
+__pycache__/

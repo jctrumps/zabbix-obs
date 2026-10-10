@@ -1,0 +1,4 @@
+---
+obs_stack_dir: /opt/zabbix-obs
+obs_compose_project_name: zabbix-obs
+obs_repo_source: "{{ playbook_dir }}/../../../"

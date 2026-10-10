@@ -1,0 +1,71 @@
+---
+- name: Validate deployment secrets
+  ansible.builtin.assert:
+    that:
+      - zabbix_db_password is defined
+      - zabbix_db_password | length >= 24
+      - zabbix_db_password != 'CHANGE_ME'
+      - zabbix_db_password is match('^[A-Za-z0-9+/=]+$')
+      - grafana_admin_password is defined
+      - grafana_admin_password | length >= 24
+      - grafana_admin_password != 'CHANGE_ME'
+      - grafana_admin_password is match('^[A-Za-z0-9+/=]+$')
+      - grafana_secret_key is defined
+      - grafana_secret_key | length >= 32
+      - grafana_secret_key != 'CHANGE_ME'
+      - grafana_secret_key is match('^[A-Za-z0-9+/=]+$')
+    fail_msg: Store independent random secrets in Ansible Vault before deployment.
+  no_log: true
+
+- name: Create application directory
+  ansible.builtin.file:
+    path: "{{ obs_stack_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create stack subdirectories
+  ansible.builtin.file:
+    path: "{{ obs_stack_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - loki
+    - otel
+    - grafana/provisioning/datasources
+    - grafana/provisioning/dashboards
+    - grafana/provisioning/alerting
+    - grafana/provisioning/plugins
+
+- name: Copy stack files
+  ansible.builtin.copy:
+    src: "{{ obs_repo_source }}/{{ item }}"
+    dest: "{{ obs_stack_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - docker-compose.yml
+    - loki/local-config.yaml
+    - otel/otel-collector-config.yaml
+    - grafana/provisioning/datasources/datasources.yaml
+    - grafana/provisioning/dashboards/dashboards.yaml
+    - grafana/provisioning/alerting/baseline.yaml
+    - grafana/provisioning/plugins/baseline.yaml
+
+- name: Render environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ obs_stack_dir }}/.env"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Start observability stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ obs_stack_dir }}"
+    state: present
+    pull: always
