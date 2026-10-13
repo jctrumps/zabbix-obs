@@ -1,0 +1,45 @@
+# Single-node Jaeger 2 storage. Separate volume from the legacy v1 database.
+extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+      endpoint: 0.0.0.0:13133
+      status:
+        enabled: true
+        path: /status
+  jaeger_query:
+    storage:
+      traces: local
+    http:
+      endpoint: 0.0.0.0:16686
+  jaeger_storage:
+    backends:
+      local:
+        badger:
+          directories:
+            keys: /badger/key
+            values: /badger/data
+          ephemeral: false
+          ttl:
+            spans: 48h
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch: {}
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: local
+
+service:
+  extensions: [healthcheckv2, jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]

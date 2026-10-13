@@ -14,6 +14,9 @@
       - grafana_secret_key | length >= 32
       - grafana_secret_key != 'CHANGE_ME'
       - grafana_secret_key is match('^[A-Za-z0-9+/=]+$')
+      - zabbix_db_password != grafana_admin_password
+      - zabbix_db_password != grafana_secret_key
+      - grafana_admin_password != grafana_secret_key
     fail_msg: Store independent random secrets in Ansible Vault before deployment.
   no_log: true
 
@@ -35,6 +38,7 @@
   loop:
     - loki
     - otel
+    - jaeger
     - grafana/provisioning/datasources
     - grafana/provisioning/dashboards
     - grafana/provisioning/alerting
@@ -51,10 +55,12 @@
     - docker-compose.yml
     - loki/local-config.yaml
     - otel/otel-collector-config.yaml
+    - jaeger/config.yaml
     - grafana/provisioning/datasources/datasources.yaml
     - grafana/provisioning/dashboards/dashboards.yaml
     - grafana/provisioning/alerting/baseline.yaml
     - grafana/provisioning/plugins/baseline.yaml
+  register: obs_stack_files
 
 - name: Render environment file
   ansible.builtin.template:
@@ -63,9 +69,60 @@
     owner: root
     group: root
     mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Validate Compose configuration without printing secrets
+  ansible.builtin.command:
+    cmd: docker compose config --quiet
+    chdir: "{{ obs_stack_dir }}"
+  changed_when: false
+  no_log: true
 
 - name: Start observability stack
   community.docker.docker_compose_v2:
     project_src: "{{ obs_stack_dir }}"
     state: present
     pull: always
+    recreate: "{{ 'always' if obs_stack_files.changed else 'auto' }}"
+    wait: true
+    wait_timeout: 300
+  no_log: true
+
+- name: Check internal telemetry readiness from the existing Zabbix container
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - zabbix-server
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - "{{ item }}"
+    chdir: "{{ obs_stack_dir }}"
+  loop:
+    - http://loki:3100/ready
+    - http://otel-collector:13133/
+    - http://jaeger:13133/status
+  register: obs_readiness
+  until: obs_readiness.rc == 0
+  retries: 30
+  delay: 5
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Show deployment status
+  ansible.builtin.command:
+    cmd: docker compose ps
+    chdir: "{{ obs_stack_dir }}"
+  register: obs_status
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Report running services
+  ansible.builtin.debug:
+    var: obs_status.stdout_lines
+  when: not ansible_check_mode

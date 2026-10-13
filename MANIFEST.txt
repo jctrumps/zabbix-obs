@@ -8,6 +8,7 @@ Core:
 Configuration:
   loki/local-config.yaml
   otel/otel-collector-config.yaml
+  jaeger/config.yaml
   grafana/provisioning/datasources/datasources.yaml
   grafana/provisioning/dashboards/dashboards.yaml
 
@@ -17,7 +18,11 @@ Deployment:
 
 Documentation:
   docs/
-  docs/windows-deployment.md
+  docs/windows-wsl-ansible.md
+  docs/daily-deployment.md
+  docs/linux-deployment.md
+  docs/cloudflare-tunnel.md
+  docs/validation-report.md
   docs/security.md
   docs/backup-restore.md
 

@@ -9,10 +9,19 @@ required=(
   README.md
   loki/local-config.yaml
   otel/otel-collector-config.yaml
+  jaeger/config.yaml
   grafana/provisioning/datasources/datasources.yaml
   grafana/provisioning/dashboards/dashboards.yaml
   deploy/ansible/playbooks/site.yml
   deploy/opentofu/proxmox/main.tf
+  docs/windows-wsl-ansible.md
+  docs/daily-deployment.md
+  docs/linux-deployment.md
+  docs/cloudflare-tunnel.md
+  docs/validation-report.md
+  deploy/ansible/inventory/hosts.ini.example
+  CONTRIBUTING.md
+  LICENSE
 )
 
 for item in "${required[@]}"; do
@@ -25,6 +34,6 @@ grep -q 'GRAFANA_ZABBIX_PLUGIN_VERSION=6.6.0' "$ROOT/.env.example"
 grep -q 'alpine:3.22.1' "$ROOT/.env.example"
 grep -q 'grafana/loki:3.7.6' "$ROOT/.env.example"
 grep -q 'otel/opentelemetry-collector-contrib:0.157.0' "$ROOT/.env.example"
-grep -q 'jaegertracing/all-in-one:1.76.0' "$ROOT/.env.example"
+grep -q 'jaegertracing/jaeger:2.15.0' "$ROOT/.env.example"
 
 echo "Structure checks passed."

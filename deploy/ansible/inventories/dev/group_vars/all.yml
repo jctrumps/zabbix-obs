@@ -1,8 +1,0 @@
----
-timezone: UTC
-zabbix_db_password: CHANGE_ME
-zabbix_db_user: zabbix
-zabbix_db_name: zabbix
-grafana_admin_user: admin
-grafana_admin_password: CHANGE_ME
-grafana_secret_key: CHANGE_ME

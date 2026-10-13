@@ -1,14 +1,30 @@
-proxmox_endpoint       = "https://PROXMOX_HOST:8006/"
-proxmox_api_token      = "PROXMOX_USER@pam!TOKEN_ID=TOKEN_SECRET"
-proxmox_insecure_tls   = false
-
-target_node            = "PROXMOX_NODE_NAME"
-vm_id                  = 9010
-vm_name                = "obs-01"
-template_vm_id         = 9000
-clone_full             = true
-cpu_cores              = 4
-memory_mb              = 8192
-disk_size              = 100
-storage_pool           = "local-lvm"
-network_bridge         = "vmbr0"
+# Replace these examples with local values; never commit the filled copy.
+proxmox_endpoint     = "https://pve.example.com:8006/"
+proxmox_insecure_tls = false
+# Prefer PROXMOX_VE_API_TOKEN in the environment. Alternatively, put
+# proxmox_api_token in a separate ignored credentials.auto.tfvars file.
+target_node    = "example-node"
+template_vm_id = 9013
+# template_node = "example-source-node" # omit when on target_node
+vm_id               = 9010
+vm_name             = "zabbix-obs"
+vm_description      = "Zabbix observability VM managed by OpenTofu"
+vm_tags             = ["opentofu", "observability"]
+clone_full          = true
+cpu_cores           = 4
+cpu_type            = "x86-64-v2-AES"
+memory_mb           = 8192
+disk_size           = 100
+disk_interface      = "scsi0"
+scsi_hardware       = "virtio-scsi-pci"
+storage_pool        = "local-lvm" # example only; verify your datastore
+network_bridge      = "vmbr0"     # example only; verify your bridge
+agent_enabled       = true        # template must already run qemu-guest-agent
+on_boot             = true
+ssh_username        = "debian"
+ssh_public_key_path = "~/.ssh/zabbix_obs_ed25519.pub"
+ipv4_address        = "dhcp"
+# For static addressing, replace dhcp and supply your actual gateway/DNS:
+# ipv4_address = "192.0.2.10/24"
+# ipv4_gateway = "192.0.2.1"
+# dns_servers  = ["192.0.2.53"]

@@ -2,7 +2,7 @@
 
 ## Phase 1: platform itself
 
-Monitor the `obs-01` host and the Zabbix stack:
+Monitor the `zabbix-obs` VM (or your locally configured VM name) and the Zabbix stack:
 
 - CPU/load
 - RAM/swap

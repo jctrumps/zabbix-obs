@@ -1,0 +1,9 @@
+---
+# Copy to vars.yml for local non-secret overrides; pass with -e @inventory/vars.yml.
+timezone: UTC
+admin_bind_address: 127.0.0.1
+zabbix_bind_address: 127.0.0.1
+telemetry_bind_address: 127.0.0.1
+grafana_root_url: http://localhost:3000
+# Opt in during a planned maintenance window; reboot remains manual.
+obs_upgrade_os: false

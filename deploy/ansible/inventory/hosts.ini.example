@@ -1,0 +1,7 @@
+# Documentation-only IP. Copy to hosts.ini and use the actual OpenTofu outputs.
+[observability]
+zabbix-obs ansible_host=192.0.2.10 ansible_user=debian
+
+[observability:vars]
+ansible_python_interpreter=/usr/bin/python3
+# Commands supply --private-key ~/.ssh/zabbix_obs_ed25519 explicitly.

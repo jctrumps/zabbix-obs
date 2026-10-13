@@ -2,6 +2,13 @@
 
 ## Core design
 
+Primary operator path: Windows CMD + native OpenTofu creates a dedicated
+Proxmox VM; Windows CMD enters `deploy/ansible` then starts WSL Ubuntu;
+Ansible over SSH configures the guest and deploys Docker Compose. Debian 13
+amd64 is the default; Ubuntu 24.04 amd64 is also supported. Start with
+4 vCPU, 8 GiB RAM, and a 100 GiB disk. The existing `deploy/` layout is
+retained so deployment assets have one home.
+
 `zabbix-obs` deliberately separates infrastructure monitoring from logs and distributed tracing.
 
 ### Zabbix
@@ -27,7 +34,9 @@ Receives OTLP logs and traces and routes them to their storage backends. It is a
 
 ### Jaeger
 
-Trace store and trace UI for request-level investigation.
+Jaeger 2 trace store and trace UI for request-level investigation. Badger
+persists in `zabbix-obs-jaeger-v2` with 48-hour trace retention. This is
+deliberately distinct from the old Jaeger 1 volume; see [operations](operations.md).
 
 ### Grafana
 
@@ -68,7 +77,13 @@ The short-lived `grafana-init` service installs the exact configured Zabbix plug
 
 ## Availability and scale
 
-The baseline is a single-node design. PostgreSQL, Loki filesystem storage, and Jaeger Badger storage are local failure domains. Jaeger all-in-one with Badger is appropriate only for light trace volume. Requirements for high availability, larger retention, or horizontal scale require a separately designed PostgreSQL HA/backup strategy and supported distributed Loki/Jaeger storage.
+The baseline is a single-node design. PostgreSQL, Loki filesystem storage, and Jaeger Badger storage are local failure domains. Single-process Jaeger with Badger is appropriate only for light trace volume. Requirements for high availability, larger retention, or horizontal scale require a separately designed PostgreSQL HA/backup strategy and supported distributed Loki/Jaeger storage.
+
+PostgreSQL, Zabbix and Grafana have Compose health checks. Loki, the Collector
+and Jaeger expose internal readiness endpoints but their minimal images do not
+provide a general HTTP probe tool. Ansible polls those endpoints from the existing
+Zabbix container; operations documentation provides the same checks. No extra
+monitoring service is added. Cloudflare routing is optional and manually managed.
 
 ## Intentional exclusions
 

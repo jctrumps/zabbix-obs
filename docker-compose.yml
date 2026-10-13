@@ -134,7 +134,7 @@ services:
       loki:
         condition: service_started
       jaeger:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
     networks: [visualization]
@@ -171,7 +171,7 @@ services:
       loki:
         condition: service_started
       jaeger:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "${TELEMETRY_BIND_ADDRESS:-127.0.0.1}:${OTLP_GRPC_PORT:-4317}:4317"
       - "${TELEMETRY_BIND_ADDRESS:-127.0.0.1}:${OTLP_HTTP_PORT:-4318}:4318"
@@ -193,32 +193,24 @@ services:
     logging: *default-logging
 
   jaeger:
-    image: ${JAEGER_IMAGE:-jaegertracing/all-in-one:1.76.0}
+    image: ${JAEGER_IMAGE:-jaegertracing/jaeger:2.15.0}
     container_name: ${COMPOSE_PROJECT_NAME:-zabbix-obs}-jaeger
     restart: unless-stopped
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-      SPAN_STORAGE_TYPE: badger
-      BADGER_EPHEMERAL: "false"
-      BADGER_DIRECTORY_VALUE: /badger/data
-      BADGER_DIRECTORY_KEY: /badger/key
+    command: ["--config=/etc/jaeger/config.yaml"]
     volumes:
       - jaeger-data:/badger
+      - ./jaeger/config.yaml:/etc/jaeger/config.yaml:ro
     depends_on:
       jaeger-init:
         condition: service_completed_successfully
     ports:
       - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${JAEGER_UI_PORT:-16686}:16686"
-    expose: ["14269"]
+    expose: ["13133"]
     networks: [visualization, telemetry]
     security_opt: [no-new-privileges:true]
     logging: *default-logging
-    healthcheck:
-      test: ["CMD", "/go/bin/all-in-one-linux", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+    # Minimal image has no HTTP probe utility. Ansible verifies the internal
+    # /status endpoint using the existing zabbix-server container.
 
 networks:
   database:
@@ -237,4 +229,5 @@ volumes:
   loki-data:
     name: ${COMPOSE_PROJECT_NAME:-zabbix-obs}-loki
   jaeger-data:
-    name: ${COMPOSE_PROJECT_NAME:-zabbix-obs}-jaeger
+    # Separate from the legacy v1 volume; see docs/operations.md before upgrading.
+    name: ${COMPOSE_PROJECT_NAME:-zabbix-obs}-jaeger-v2

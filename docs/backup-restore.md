@@ -1,150 +1,108 @@
 # Backup and restore
 
-## Scope
+A recoverable set includes a PostgreSQL logical dump, Grafana/Loki/Jaeger
+volumes, the matching repository revision/image digests, and encrypted secrets
+(especially `GRAFANA_SECRET_KEY`). Repository copies do not back up named volumes.
+Use encrypted off-host storage, retention, backup monitoring and isolated restore
+exercises. Backup commands below deliberately stop writers for consistency;
+schedule downtime and pause/retry telemetry senders.
 
-A complete recoverable backup includes:
+## Backup — REMOTE VM Bash
 
-- a PostgreSQL logical dump for all Zabbix configuration, history, users, and events
-- the Grafana volume for users, data-source secrets, plugins, and UI-managed content
-- the Loki volume for retained logs
-- the Jaeger volume for retained traces
-- the repository revision and the corresponding `.env` values or secrets-manager records
+SSH to the guest; become root so `.env` and backup files remain private:
 
-The `.env` file contains credentials and the Grafana encryption key. Store it separately in an encrypted secrets backup, not in the same unencrypted archive as application data.
-
-Copying the project directory alone does not back up Docker named volumes.
-
-## Backup requirements
-
-- Write backups outside the repository.
-- Encrypt backups at rest and in transit.
-- Keep at least one off-host/off-site copy.
-- Define retention and recovery objectives.
-- Monitor backup success and capacity.
-- Test restoration on an isolated host; an untested backup is not a recovery plan.
-
-## PostgreSQL backup
-
-Create a custom-format logical dump. These PowerShell commands avoid binary corruption from shell redirection:
-
-```powershell
-$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$backupRoot = Join-Path $HOME "zabbix-obs-backups\$stamp"
-New-Item -ItemType Directory -Path $backupRoot | Out-Null
-
-docker compose exec -T postgres pg_dump `
-    -U zabbix -d zabbix -Fc -f /tmp/zabbix.dump
-
-$postgresId = docker compose ps -q postgres
-docker cp "${postgresId}:/tmp/zabbix.dump" (Join-Path $backupRoot 'zabbix.dump')
-docker compose exec -T postgres rm -f /tmp/zabbix.dump
-```
-
-If `ZABBIX_DB_USER` or `ZABBIX_DB_NAME` differs from the defaults, use the configured values. Verify the dump:
-
-```powershell
-Get-Item (Join-Path $backupRoot 'zabbix.dump')
-docker run --rm --mount "type=bind,source=$backupRoot,target=/backup,readonly" `
-    postgres:17.11-alpine3.24 pg_restore --list /backup/zabbix.dump
-```
-
-## Volume backup
-
-Stop writers briefly for a consistent Loki, Jaeger, and Grafana snapshot:
-
-```powershell
-docker compose stop otel-collector grafana loki jaeger
-```
-
-Archive each volume, replacing `zabbix-obs` if `COMPOSE_PROJECT_NAME` differs:
-
-```powershell
-$volumes = @('grafana', 'loki', 'jaeger')
-foreach ($name in $volumes) {
-    docker run --rm `
-        --mount "type=volume,source=zabbix-obs-$name,target=/source,readonly" `
-        --mount "type=bind,source=$backupRoot,target=/backup" `
-        alpine:3.22.1 tar -czf "/backup/$name.tgz" -C /source .
-}
-
-docker compose up -d
+```bash
+sudo -i
+cd /opt/zabbix-obs
+umask 077
+BACKUP="/var/backups/zabbix-obs/$(date -u +%Y%m%dT%H%M%SZ)"
+install -d -m 700 "$BACKUP"
+docker compose config --quiet
+docker compose stop zabbix-server zabbix-web otel-collector grafana loki jaeger
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$BACKUP/zabbix.dump"
+docker compose exec -T postgres pg_restore --list < "$BACKUP/zabbix.dump"
+for name in grafana loki jaeger-v2; do
+  docker run --rm --network none \
+    --mount "type=volume,source=zabbix-obs-$name,target=/source,readonly" \
+    --mount "type=bind,source=$BACKUP,target=/backup" \
+    alpine:3.22.1 tar -czf "/backup/$name.tgz" -C /source . || break
+done
+(cd "$BACKUP" && sha256sum zabbix.dump grafana.tgz loki.tgz jaeger-v2.tgz > SHA256SUMS)
+docker compose up -d --wait --wait-timeout 300
 docker compose ps
+exit
 ```
 
-Record checksums before transferring the backup:
+Use the configured Compose project name if it differs from `zabbix-obs`.
+Check every command result; do not treat a partial archive set as a backup.
+For volume archives, run `tar -tzf` before transfer. Run the internal readiness
+probes in [operations](operations.md) after resuming; Compose alone does not
+probe minimal-image telemetry services. If dumping/archiving fails, preserve
+diagnostics locally, restore service promptly, fix capacity/permissions and retry.
 
-```powershell
-Get-FileHash (Join-Path $backupRoot '*') -Algorithm SHA256 |
-    Format-Table -AutoSize
-```
-
-The helper image is version-pinned but should still be approved and scanned in controlled environments.
+Keep application secrets in a **separate encrypted** backup using your secrets
+manager. Do not place unencrypted `.env` in the data archive. Transfer the data
+set using your encrypted backup system and verify its SHA-256 checksums on the
+destination. Establish schedules/RPO/RTO appropriate to your monitoring history.
 
 ## Restore prerequisites
 
-1. Isolate the restore target from production senders and users.
-2. Install the same Compose and component versions used for the backup.
-3. Restore the original Grafana secret key; otherwise encrypted Grafana data-source credentials cannot be decrypted.
-4. Create `.env` and validate it with `docker compose config --quiet`.
-5. Preserve the original backup and work from a copy.
+Use an isolated disposable VM without production senders or notifications.
+Deploy the exact matching source/images and original secrets. If Ansible already
+started services on the restore target, stop them before restoring. Use **empty
+named volumes**; never extract over an existing database. Preserve original
+backups. A fresh v2 archive is restored to v2, not a v1 volume.
 
-## Restore PostgreSQL
+## Restore — REMOTE VM Bash, isolated target only
 
-Start only PostgreSQL and wait for it to become healthy:
+Place verified backups under `/var/backups/zabbix-obs/restore` on the target,
+then:
 
-```powershell
+```bash
+sudo -i
+cd /opt/zabbix-obs
+BACKUP=/var/backups/zabbix-obs/restore
+(cd "$BACKUP" && sha256sum -c SHA256SUMS)
+docker compose stop
 docker compose up -d postgres
 docker compose ps postgres
 ```
 
-Copy and restore the dump into a new, empty Zabbix database. The following destructive commands are appropriate only on the isolated restore target:
+Wait until PostgreSQL is healthy. The following drops/recreates **the target
+database** and must never be run against production for a restore exercise:
 
-```powershell
-$postgresId = docker compose ps -q postgres
-docker cp (Join-Path $backupRoot 'zabbix.dump') "${postgresId}:/tmp/zabbix.dump"
-
-docker compose exec -T postgres dropdb -U zabbix --if-exists zabbix
-docker compose exec -T postgres createdb -U zabbix -O zabbix zabbix
-docker compose exec -T postgres pg_restore `
-    -U zabbix -d zabbix --no-owner --no-privileges /tmp/zabbix.dump
-docker compose exec -T postgres rm -f /tmp/zabbix.dump
+```bash
+docker compose exec -T postgres sh -c 'dropdb -U "$POSTGRES_USER" --if-exists "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" -O "$POSTGRES_USER" "$POSTGRES_DB"'
+docker compose exec -T postgres sh -c 'pg_restore --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' < "$BACKUP/zabbix.dump"
 ```
 
-Use configured database/user names if they differ. Do not drop a production database to test a restore.
+For **fresh empty** non-database target volumes (if Ansible populated them, use
+a new isolated project/VM or deliberately remove only those test volumes first):
 
-## Restore named volumes
-
-Ensure the target services are stopped. Restore each archive into its empty named volume:
-
-```powershell
-docker compose stop grafana loki jaeger otel-collector
-
-$volumes = @('grafana', 'loki', 'jaeger')
-foreach ($name in $volumes) {
-    docker run --rm `
-        --mount "type=volume,source=zabbix-obs-$name,target=/target" `
-        --mount "type=bind,source=$backupRoot,target=/backup,readonly" `
-        alpine:3.22.1 sh -c "rm -rf /target/* /target/.[!.]* /target/..?* 2>/dev/null; tar -xzf /backup/$name.tgz -C /target"
-}
-
-docker compose up -d
+```bash
+for name in grafana loki jaeger-v2; do
+  docker volume create "zabbix-obs-$name"
+  docker run --rm --network none \
+    --mount "type=volume,source=zabbix-obs-$name,target=/target" \
+    --mount "type=bind,source=$BACKUP,target=/backup,readonly" \
+    alpine:3.22.1 sh -ec \
+    'test -z "$(ls -A /target)"; tar -xzf "/backup/$1.tgz" -C /target' sh "$name" || break
+done
+docker compose up -d --wait --wait-timeout 300
+docker compose ps --all
+exit
 ```
 
-Loki can return `503 Service Unavailable` briefly while its single-node ring
-initializes and restored state is loaded. Wait for readiness before validating
-retained logs; a one-time `empty ring` message during this startup interval is
-expected, but repeated errors after Loki is ready require investigation.
+If the empty-volume check fails, stop and prepare a genuinely isolated empty
+target rather than bypassing the check. If any restore step fails, do not
+reconnect users/senders. Check logs and archive integrity.
 
-## Restore validation
+## Acceptance and rollback
 
-- Confirm every expected container is running or healthy.
-- Sign in with a named Zabbix and Grafana account.
-- Confirm Zabbix hosts, history, triggers, actions, and media types.
-- Confirm Grafana data sources and dashboards.
-- Query a known retained Loki log and Jaeger trace.
-- Send a new test log, trace, and Zabbix value.
-- Trigger and recover a test notification.
-- Review logs for database migration or permission errors.
-- Record restore duration and any manual correction needed.
-
-Only reconnect senders and users after validation succeeds.
+Run [operations health checks](operations.md), log in with restored named users,
+verify Zabbix hosts/history/actions and Grafana dashboards/data sources. Query a
+known retained Loki log and Jaeger trace, then send new telemetry. Test alert and
+recovery delivery to an isolated recipient. Record restore duration and errors.
+Only reconnect production senders after validation. Rollback after a schema
+upgrade requires the pre-upgrade source, images and compatible backup, not just
+changing an image tag. The validation report states which tests were actually run.

@@ -33,7 +33,7 @@ These are defense-in-depth controls, not a complete production security boundary
 | High | OTLP has no authentication or TLS and can accept sensitive or abusive payloads | Loopback-only default and isolated network | Use TLS/mTLS or an authenticated gateway; restrict sender networks |
 | High | Jaeger UI/API has no user authentication | Loopback-only default | Restrict to administrators behind the authenticated edge |
 | High | Single host and single PostgreSQL instance are a monitoring and alerting failure domain | Persistent volumes and restart policy | Maintain off-host backups; use HA architecture if the business requirement demands it |
-| High | Jaeger 1.76 is the archived 1.x line and all-in-one/Badger is intended for light single-node use | Pinned version and private exposure | Plan migration to supported Jaeger 2.x and a production storage backend before scaling |
+| High | Single-node Jaeger 2/Badger has a local storage failure domain | Pinned version, persistent volume, 48-hour retention and private exposure | Back up traces; use supported distributed storage before scaling |
 | Medium | Secrets are passed through container environment and are visible to Docker administrators | `.env` excluded from Git and mode `0600` under Ansible | Limit Docker access; use a secrets manager/file-based secrets if threat model requires it |
 | Medium | Version tags are mutable and no vulnerability scan is automated | Explicit tags | Resolve and record digests, generate an SBOM, and scan images in promotion workflow |
 | Medium | Loki and Jaeger are single-node local stores; disk exhaustion can stop services | Loki 30-day retention and log rotation | Set capacity alerts, test retention, and define trace retention/storage strategy |
